@@ -9,21 +9,14 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install packages
+      - name: Install dependencies
         run: |
           sudo apt update
-
-          sudo apt install -y \
-            ffmpeg \
-            jq \
-            curl \
-            lftp \
-            python3
-
-          pip install yt-dlp
+          sudo apt install -y ffmpeg jq curl lftp python3 python3-pip
+          pip3 install --upgrade yt-dlp
 
       - name: Download music
         run: |
@@ -32,29 +25,28 @@ jobs:
 
           while IFS= read -r ARTIST || [ -n "$ARTIST" ]; do
 
-            echo "================================="
-            echo "Artist: $ARTIST"
-            echo "================================="
+            echo "=============================="
+            echo "Downloading for: $ARTIST"
+            echo "=============================="
 
-            SAFE_ARTIST=$(echo "$ARTIST" | sed 's#[/:*?"<>|]##g')
+            SAFE_ARTIST=$(echo "$ARTIST" | tr '/' '-' | tr ':' '-' | tr '?' '')
 
             mkdir -p "downloads/$SAFE_ARTIST"
 
             SEARCH_QUERY="${ARTIST} official audio"
 
             yt-dlp \
-              "ytsearch3:${SEARCH_QUERY}" \
-              --match-filter "duration < 900" \
+              "ytsearch2:${SEARCH_QUERY}" \
               --extract-audio \
               --audio-format mp3 \
               --embed-thumbnail \
-              --add-metadata \
               --write-thumbnail \
               --convert-thumbnails jpg \
-              --output "downloads/$SAFE_ARTIST/%(title)s.%(ext)s" \
+              --add-metadata \
+              --restrict-filenames \
               --no-playlist \
               --ignore-errors \
-              --no-overwrites
+              --output "downloads/$SAFE_ARTIST/%(title).100s.%(ext)s"
 
           done < artists.txt
 
@@ -66,16 +58,14 @@ jobs:
           FTP_DIR: ${{ secrets.FTP_DIR }}
         run: |
 
+          echo "Uploading files to FTP..."
+
           lftp -e "
           set ssl:verify-certificate no
-
           open ftp://$FTP_USER:$FTP_PASS@$FTP_HOST
-
           mirror -R downloads $FTP_DIR
-
           bye
           "
 
-      - name: Finished
-        run: |
-          echo "✅ Upload completed"
+      - name: Done
+        run: echo "✅ Music download and upload finished"
