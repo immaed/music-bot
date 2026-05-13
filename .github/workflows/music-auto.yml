@@ -15,8 +15,39 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y ffmpeg jq curl lftp python3 python3-pip
+
+          sudo apt install -y \
+            ffmpeg \
+            jq \
+            curl \
+            lftp \
+            python3 \
+            python3-pip \
+            wget \
+            gnupg
+
           pip3 install --upgrade yt-dlp
+
+      - name: Install Cloudflare WARP
+        run: |
+
+          curl https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+
+          sudo apt update
+          sudo apt install -y cloudflare-warp
+
+      - name: Connect WARP
+        run: |
+
+          sudo warp-cli registration new
+          sudo warp-cli mode warp
+          sudo warp-cli connect
+
+          sleep 10
+
+          warp-cli status
 
       - name: Download music
         run: |
@@ -46,6 +77,7 @@ jobs:
               --restrict-filenames \
               --no-playlist \
               --ignore-errors \
+              --geo-bypass \
               --output "downloads/$SAFE_ARTIST/%(title).100s.%(ext)s"
 
           done < artists.txt
