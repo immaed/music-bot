@@ -10,41 +10,35 @@ jobs:
 
     steps:
 
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-
-      - name: Install dependencies
+      - name: Install
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg python3-pip lftp
           pip3 install -U yt-dlp
 
 
-      - name: Show versions
-        run: |
-          yt-dlp --version
-          ffmpeg -version | head -n 3
-
-
-      - name: Download test music
+      - name: Download music
         run: |
           mkdir -p upload
 
           yt-dlp "ytsearch1:the weeknd official audio" \
-          --extract-audio \
-          --audio-format mp3 \
-          --audio-quality 0 \
-          --embed-thumbnail \
-          --add-metadata \
-          --extractor-args "youtube:player_client=android" \
-          -o "upload/%(title).100s.%(ext)s"
+            --extract-audio \
+            --audio-format mp3 \
+            --audio-quality 0 \
+            --add-metadata \
+            --embed-thumbnail \
+            --retries 5 \
+            --fragment-retries 5 \
+            --extractor-args "youtube:player_client=android,web,mweb" \
+            -o "upload/%(title).100s.%(ext)s"
 
-          echo "Downloaded files:"
+          echo "Files:"
           find upload
 
 
-      - name: Upload to FTP (debug mode)
+      - name: Upload FTP
         env:
           FTP_HOST: ${{ secrets.FTP_HOST }}
           FTP_USER: ${{ secrets.FTP_USER }}
@@ -52,26 +46,10 @@ jobs:
           FTP_DIR: ${{ secrets.FTP_DIR }}
         run: |
 
-          set -x
-
-          echo "Checking upload folder"
-          ls -lah upload || true
-
-          echo "Checking FTP variables"
-          echo "HOST=$FTP_HOST"
-          echo "USER=$FTP_USER"
-          echo "DIR=$FTP_DIR"
-
-          echo "Starting FTP..."
-
           lftp -d -e "
           set ssl:verify-certificate no;
           set ftp:passive-mode on;
-          set net:timeout 20;
-          set net:max-retries 1;
           open ftp://$FTP_USER:$FTP_PASS@$FTP_HOST;
-          pwd;
-          ls;
           mkdir -p $FTP_DIR;
           mirror -R upload $FTP_DIR;
           bye;
