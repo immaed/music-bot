@@ -1,61 +1,48 @@
 import os
-import sys
-from ftplib import FTP, error_perm
+import subprocess
+from ftplib import FTP
 
-# ========= تنظیمات =========
-artist = "Aaryan Shah"   # ← اسم خواننده
-ftp_host = "dl.lyricaa.ir"
-ftp_user = "musicbot"
-ftp_pass = "M@edeh1377"   # ← رمز واقعی FTP
-ftp_folder = "music"
-# ===========================
+ARTIST = "Aaryan Shah"
 
-try:
-    print("🔎 Searching and downloading songs...")
-    search_query = f'ytsearch5:{artist} official audio -live -remix'
+FTP_HOST = "dl.lyricaa.ir"
+FTP_USER = "musicbot"
+FTP_PASS = "M@edeh1377"
 
-    result = os.system(
-        f'yt-dlp "{search_query}" '
-        '-x --audio-format mp3 '
-        '--audio-quality 0 '
-        '-o "%(title)s.%(ext)s"'
-    )
+DOWNLOAD_DIR = "downloads"
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-    if result != 0:
-        print("❌ yt-dlp failed!")
-        sys.exit(1)
+print("Downloading music...")
 
-    mp3_files = [f for f in os.listdir() if f.endswith(".mp3")]
+cmd = [
+    "yt-dlp",
+    "ytsearch1:" + ARTIST + " official audio",
+    "-x",
+    "--audio-format", "mp3",
+    "-o", DOWNLOAD_DIR + "/%(title)s.%(ext)s"
+]
 
-    if not mp3_files:
-        print("❌ No MP3 files found after download!")
-        sys.exit(1)
+subprocess.run(cmd)
 
-    print(f"✅ Downloaded {len(mp3_files)} files")
+files = os.listdir(DOWNLOAD_DIR)
 
-    print("🌐 Connecting to FTP...")
-    ftp = FTP(ftp_host)
-    ftp.login(ftp_user, ftp_pass)
-    print("✅ FTP login successful")
+if not files:
+    print("No file downloaded")
+    exit()
 
-    ftp.cwd(ftp_folder)
-    print(f"📂 Changed to folder: {ftp_folder}")
+file_path = DOWNLOAD_DIR + "/" + files[0]
 
-    for file in mp3_files:
-        print(f"⬆ Uploading: {file}")
-        with open(file, "rb") as f:
-            ftp.storbinary(f"STOR {file}", f)
+print("Connecting FTP...")
 
-        os.remove(file)
-        print(f"🗑 Removed local file: {file}")
+ftp = FTP(FTP_HOST)
+ftp.login(FTP_USER, FTP_PASS)
 
-    ftp.quit()
-    print("✅✅✅ DONE SUCCESSFULLY ✅✅✅")
+ftp.cwd("music")
 
-except error_perm as e:
-    print("❌ FTP permission error:", e)
-    sys.exit(1)
+print("Uploading...")
 
-except Exception as e:
-    print("❌ Unexpected error:", e)
-    sys.exit(1)
+with open(file_path, "rb") as f:
+    ftp.storbinary("STOR " + files[0], f)
+
+ftp.quit()
+
+print("Done")
