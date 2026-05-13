@@ -15,27 +15,28 @@ jobs:
       - name: Install
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg python3-pip lftp
+          sudo apt-get install -y ffmpeg python3-pip lftp curl
           pip3 install -U yt-dlp
 
 
-      - name: Download music
+      - name: Download via Invidious
         run: |
+
           mkdir -p upload
 
-          yt-dlp "ytsearch1:the weeknd official audio" \
+          yt-dlp \
+            "https://youtu.be/E3QiD99jPAg" \
+            --extractor-args "youtube:player_skip=webpage,configs" \
+            --force-ipv4 \
             --extract-audio \
             --audio-format mp3 \
             --audio-quality 0 \
             --add-metadata \
             --embed-thumbnail \
-            --retries 5 \
-            --fragment-retries 5 \
-            --extractor-args "youtube:player_client=android,web,mweb" \
             -o "upload/%(title).100s.%(ext)s"
 
-          echo "Files:"
-          find upload
+          echo "FILES:"
+          find upload || true
 
 
       - name: Upload FTP
