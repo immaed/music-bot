@@ -1,41 +1,61 @@
 import os
-from ftplib import FTP
+import sys
+from ftplib import FTP, error_perm
 
 # ========= تنظیمات =========
-artist = "aaryan shah"   # ← اینجا اسم خواننده رو عوض کن
+artist = "Aaryan Shah"   # ← اسم خواننده
 ftp_host = "dl.lyricaa.ir"
 ftp_user = "musicbot"
-ftp_pass = "M@edeh1377"   # ← رمز FTP خودتو بزار اینجا
+ftp_pass = "M@edeh1377"   # ← رمز واقعی FTP
 ftp_folder = "music"
 # ===========================
 
-print("Searching and downloading songs...")
+try:
+    print("🔎 Searching and downloading songs...")
+    search_query = f'ytsearch5:{artist} official audio -live -remix'
 
-# سرچ و دانلود 5 آهنگ رسمی (حذف live/remix)
-search_query = f'ytsearch5:{artist} official audio -live -remix'
+    result = os.system(
+        f'yt-dlp "{search_query}" '
+        '-x --audio-format mp3 '
+        '--audio-quality 0 '
+        '-o "%(title)s.%(ext)s"'
+    )
 
-os.system(
-    f'yt-dlp "{search_query}" '
-    '-x --audio-format mp3 '
-    '--audio-quality 0 '
-    '-o "%(title)s.%(ext)s"'
-)
+    if result != 0:
+        print("❌ yt-dlp failed!")
+        sys.exit(1)
 
-print("Connecting to FTP...")
+    mp3_files = [f for f in os.listdir() if f.endswith(".mp3")]
 
-ftp = FTP(ftp_host)
-ftp.login(ftp_user, ftp_pass)
-ftp.cwd(ftp_folder)
+    if not mp3_files:
+        print("❌ No MP3 files found after download!")
+        sys.exit(1)
 
-for file in os.listdir():
-    if file.endswith(".mp3"):
-        print("Uploading:", file)
+    print(f"✅ Downloaded {len(mp3_files)} files")
 
+    print("🌐 Connecting to FTP...")
+    ftp = FTP(ftp_host)
+    ftp.login(ftp_user, ftp_pass)
+    print("✅ FTP login successful")
+
+    ftp.cwd(ftp_folder)
+    print(f"📂 Changed to folder: {ftp_folder}")
+
+    for file in mp3_files:
+        print(f"⬆ Uploading: {file}")
         with open(file, "rb") as f:
             ftp.storbinary(f"STOR {file}", f)
 
-        os.remove(file)  # پاک کردن بعد از آپلود
+        os.remove(file)
+        print(f"🗑 Removed local file: {file}")
 
-ftp.quit()
+    ftp.quit()
+    print("✅✅✅ DONE SUCCESSFULLY ✅✅✅")
 
-print("✅ Done! All files uploaded.")
+except error_perm as e:
+    print("❌ FTP permission error:", e)
+    sys.exit(1)
+
+except Exception as e:
+    print("❌ Unexpected error:", e)
+    sys.exit(1)
