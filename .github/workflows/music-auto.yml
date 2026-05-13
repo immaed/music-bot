@@ -6,33 +6,80 @@ on:
 jobs:
   music:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
 
       - uses: actions/checkout@v4
 
-      - name: Install
+
+      - name: Install packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg python3-pip lftp curl
+
+          sudo apt-get install -y \
+            ffmpeg \
+            python3-pip \
+            lftp \
+            curl \
+            gnupg \
+            ca-certificates \
+            nodejs \
+            npm
+
           pip3 install -U yt-dlp
 
+          node -v
+          yt-dlp --version
 
-      - name: Download via Invidious
+
+      - name: Install WARP
+        run: |
+
+          curl https://pkg.cloudflareclient.com/pubkey.gpg \
+            | sudo gpg --yes --dearmor \
+            -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" \
+            | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+
+          sudo apt-get update
+          sudo apt-get install -y cloudflare-warp
+
+
+      - name: Connect WARP
+        run: |
+
+          sudo warp-cli --accept-tos registration new || true
+
+          sudo warp-cli --accept-tos mode warp
+
+          timeout 20 sudo warp-cli --accept-tos connect || true
+
+          sleep 10
+
+          warp-cli status || true
+
+          curl https://www.cloudflare.com/cdn-cgi/trace || true
+
+
+      - name: Download music
         run: |
 
           mkdir -p upload
 
           yt-dlp \
             "https://youtu.be/E3QiD99jPAg" \
-            --extractor-args "youtube:player_skip=webpage,configs" \
             --force-ipv4 \
             --extract-audio \
             --audio-format mp3 \
             --audio-quality 0 \
-            --add-metadata \
             --embed-thumbnail \
+            --add-metadata \
+            --js-runtimes node \
+            --extractor-args "youtube:player_client=android,mweb" \
+            --retries 10 \
+            --fragment-retries 10 \
             -o "upload/%(title).100s.%(ext)s"
 
           echo "FILES:"
