@@ -4,148 +4,75 @@ on:
   workflow_dispatch:
 
 jobs:
-  download:
+  music:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
 
     steps:
-      - name: Checkout repository
+
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Show basic info
-        run: |
-          echo "Runner started"
-          uname -a
-          python3 --version || true
 
-      - name: Install packages
+      - name: Install dependencies
         run: |
-          set -euxo pipefail
           sudo apt-get update
-          sudo apt-get install -y ffmpeg curl jq lftp ca-certificates gnupg python3 python3-pip
-          python3 -m pip install --upgrade pip
-          python3 -m pip install --upgrade yt-dlp
+          sudo apt-get install -y ffmpeg python3-pip lftp
+          pip3 install -U yt-dlp
+
+
+      - name: Show versions
+        run: |
           yt-dlp --version
           ffmpeg -version | head -n 3
 
-      - name: Install Cloudflare WARP
+
+      - name: Download test music
         run: |
-          set -euxo pipefail
-          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ jammy main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-          sudo apt-get update
-          sudo apt-get install -y cloudflare-warp
-          warp-cli --version || true
+          mkdir -p upload
 
-      - name: Connect WARP with timeout
-        run: |
-          set -euxo pipefail
+          yt-dlp "ytsearch1:the weeknd official audio" \
+          --extract-audio \
+          --audio-format mp3 \
+          --audio-quality 0 \
+          --embed-thumbnail \
+          --add-metadata \
+          --extractor-args "youtube:player_client=android" \
+          -o "upload/%(title).100s.%(ext)s"
 
-          timeout 20s sudo warp-cli --accept-tos registration new || true
-          timeout 15s sudo warp-cli --accept-tos mode warp || true
-          timeout 20s sudo warp-cli --accept-tos connect || true
+          echo "Downloaded files:"
+          find upload
 
-          sleep 5
-          timeout 10s warp-cli status || true
 
-      - name: Check artists file
-        run: |
-          set -euxo pipefail
-          test -f artists.txt
-          echo "artists.txt content:"
-          nl -ba artists.txt
-
-      - name: Download music with detailed logs
-        run: |
-          set -u
-          mkdir -p downloads
-          touch download-report.txt
-
-          while IFS= read -r ARTIST || [ -n "$ARTIST" ]; do
-            ARTIST="$(echo "$ARTIST" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-
-            if [ -z "$ARTIST" ]; then
-              continue
-            fi
-
-            echo "===================================="
-            echo "Processing artist: $ARTIST"
-            echo "===================================="
-
-            SAFE_ARTIST="$(echo "$ARTIST" | sed 's#[/:*?"<>|]##g' | sed 's/  */ /g')"
-            mkdir -p "downloads/$SAFE_ARTIST"
-
-            QUERY="${ARTIST} official audio"
-
-            echo "Search query: $QUERY" | tee -a download-report.txt
-
-            yt-dlp \
-              "ytsearch1:${QUERY}" \
-              --verbose \
-              --ignore-errors \
-              --no-playlist \
-              --geo-bypass \
-              --extract-audio \
-              --audio-format mp3 \
-              --audio-quality 0 \
-              --embed-thumbnail \
-              --add-metadata \
-              --restrict-filenames \
-              --socket-timeout 20 \
-              --retries 2 \
-              --fragment-retries 2 \
-              --extractor-args "youtube:player_client=android" \
-              -o "downloads/$SAFE_ARTIST/%(title).100s.%(ext)s" \
-              >> download-report.txt 2>&1 || true
-
-            echo "" >> download-report.txt
-          done < artists.txt
-
-          echo "Finished download phase"
-          find downloads -type f | sed 's#^#FILE: #' || true
-
-      - name: Show download report
-        if: always()
-        run: |
-          echo "=========== DOWNLOAD REPORT BEGIN ==========="
-          tail -n 300 download-report.txt || true
-          echo "=========== DOWNLOAD REPORT END ============="
-
-      - name: Upload to FTP
+      - name: Upload to FTP (debug mode)
         env:
           FTP_HOST: ${{ secrets.FTP_HOST }}
           FTP_USER: ${{ secrets.FTP_USER }}
           FTP_PASS: ${{ secrets.FTP_PASS }}
           FTP_DIR: ${{ secrets.FTP_DIR }}
         run: |
-          set -euxo pipefail
 
-          test -n "$FTP_HOST"
-          test -n "$FTP_USER"
-          test -n "$FTP_PASS"
-          test -n "$FTP_DIR"
+          set -x
 
-          find downloads -type f | grep . || { echo "No files downloaded, skipping FTP upload"; exit 1; }
+          echo "Checking upload folder"
+          ls -lah upload || true
+
+          echo "Checking FTP variables"
+          echo "HOST=$FTP_HOST"
+          echo "USER=$FTP_USER"
+          echo "DIR=$FTP_DIR"
+
+          echo "Starting FTP..."
 
           lftp -d -e "
           set ssl:verify-certificate no;
-          set net:timeout 20;
-          set net:max-retries 2;
           set ftp:passive-mode on;
+          set net:timeout 20;
+          set net:max-retries 1;
           open ftp://$FTP_USER:$FTP_PASS@$FTP_HOST;
+          pwd;
+          ls;
           mkdir -p $FTP_DIR;
-          mirror -R downloads $FTP_DIR;
-          bye
+          mirror -R upload $FTP_DIR;
+          bye;
           "
-
-      - name: Upload logs as artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: music-auto-logs
-          path: |
-            download-report.txt
-            artists.txt
-
-      - name: Done
-        run: echo "Done"
