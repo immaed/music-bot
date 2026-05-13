@@ -29,7 +29,7 @@ jobs:
             echo "Downloading for: $ARTIST"
             echo "=============================="
 
-            SAFE_ARTIST=$(echo "$ARTIST" | tr '/' '-' | tr ':' '-' | tr '?' '')
+            SAFE_ARTIST=$(echo "$ARTIST" | sed 's#[/:*?"<>|]##g')
 
             mkdir -p "downloads/$SAFE_ARTIST"
 
